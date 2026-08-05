@@ -1,0 +1,13 @@
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+motor>=3.3.2
+python-multipart>=0.0.9
+insightface>=0.7.3
+onnxruntime>=1.17.1
+scikit-learn>=1.4.0
+numpy>=1.26.4,<2.0.0
+opencv-python-headless>=4.9.0
+pillow>=10.2.0
+pillow-heif>=0.15.0
+pydantic-settings>=2.2.0
+python-dotenv>=1.0.1
