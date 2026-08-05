@@ -1,3 +1,5 @@
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+
 export async function uploadFolder(files, folderName = "Photos") {
   const formData = new FormData();
   formData.append("folder_name", folderName);
@@ -6,7 +8,7 @@ export async function uploadFolder(files, folderName = "Photos") {
     formData.append("files", files[i]);
   }
 
-  const response = await fetch("/api/uploads", {
+  const response = await fetch(`${API_BASE}/api/uploads`, {
     method: "POST",
     body: formData,
   });
@@ -20,7 +22,7 @@ export async function uploadFolder(files, folderName = "Photos") {
 }
 
 export async function startJob(uploadId) {
-  const response = await fetch(`/api/jobs/${uploadId}/start`, {
+  const response = await fetch(`${API_BASE}/api/jobs/${uploadId}/start`, {
     method: "POST",
   });
 
@@ -33,21 +35,36 @@ export async function startJob(uploadId) {
 }
 
 export async function getClusters(jobId) {
-  const response = await fetch(`/api/clusters/${jobId}`);
+  const response = await fetch(`${API_BASE}/api/clusters/${jobId}`);
   if (!response.ok) {
     throw new Error("Failed to fetch clusters");
   }
-  return await response.json();
+  const data = await response.json();
+  // Adjust thumbnail URLs if API_BASE is set
+  if (data.clusters) {
+    data.clusters = data.clusters.map(c => ({
+      ...c,
+      thumbnail_url: c.thumbnail_url ? (c.thumbnail_url.startsWith('http') ? c.thumbnail_url : `${API_BASE}${c.thumbnail_url}`) : null
+    }));
+  }
+  return data;
 }
 
 export async function getClusterPhotos(jobId, clusterId) {
-  const response = await fetch(`/api/clusters/${jobId}/${clusterId}/photos`);
+  const response = await fetch(`${API_BASE}/api/clusters/${jobId}/${clusterId}/photos`);
   if (!response.ok) {
     throw new Error("Failed to fetch photos for cluster");
   }
-  return await response.json();
+  const data = await response.json();
+  if (data.photos) {
+    data.photos = data.photos.map(p => ({
+      ...p,
+      url: p.url.startsWith('http') ? p.url : `${API_BASE}${p.url}`
+    }));
+  }
+  return data;
 }
 
 export function getClusterZipUrl(jobId, clusterId) {
-  return `/api/clusters/${jobId}/${clusterId}/zip`;
+  return `${API_BASE}/api/clusters/${jobId}/${clusterId}/zip`;
 }

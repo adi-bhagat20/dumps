@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+
 export function useSSE(jobId, { onProgress, onComplete, onError }) {
   const [isConnecting, setIsConnecting] = useState(false);
 
@@ -7,7 +9,8 @@ export function useSSE(jobId, { onProgress, onComplete, onError }) {
     if (!jobId) return;
 
     setIsConnecting(true);
-    const eventSource = new EventSource(`/api/jobs/${jobId}/stream`);
+    const streamUrl = `${API_BASE}/api/jobs/${jobId}/stream`;
+    const eventSource = new EventSource(streamUrl);
 
     eventSource.onopen = () => {
       setIsConnecting(false);
@@ -19,7 +22,12 @@ export function useSSE(jobId, { onProgress, onComplete, onError }) {
         if (data.type === 'progress') {
           onProgress?.(data.processed, data.total);
         } else if (data.type === 'completed') {
-          onComplete?.(data.clusters);
+          // Format thumbnail URLs if API_BASE is set
+          const clusters = (data.clusters || []).map(c => ({
+            ...c,
+            thumbnail_url: c.thumbnail_url ? (c.thumbnail_url.startsWith('http') ? c.thumbnail_url : `${API_BASE}${c.thumbnail_url}`) : null
+          }));
+          onComplete?.(clusters);
           eventSource.close();
         } else if (data.type === 'error') {
           onError?.(data.error || 'Processing failed');
@@ -33,7 +41,6 @@ export function useSSE(jobId, { onProgress, onComplete, onError }) {
     eventSource.onerror = (err) => {
       console.error('SSE connection error:', err);
       setIsConnecting(false);
-      // EventSource will automatically retry connecting if needed
     };
 
     return () => {
