@@ -22,7 +22,7 @@ def init_face_model():
     if _face_app is None:
         logger.info("Initializing InsightFace model (CPU mode)...")
         # ctx_id = -1 instructs insightface to use CPU
-        app = FaceAnalysis(name="buffalo_l", providers=['CPUExecutionProvider'])
+        app = FaceAnalysis(name="buffalo_s", providers=['CPUExecutionProvider'])
         app.prepare(ctx_id=-1, det_size=(640, 640))
         _face_app = app
         logger.info("InsightFace model initialized successfully.")
