@@ -257,12 +257,11 @@ def create_face_thumbnail(upload_id: str, cluster_id: str, face: DetectedFace) -
             cropped = img.crop((crop_x1, crop_y1, crop_x2, crop_y2))
             cropped.thumbnail((250, 250))
             
-            thumb_dir = storage_service.get_thumbnails_dir(upload_id)
+            import io
+            thumb_buffer = io.BytesIO()
+            cropped.save(thumb_buffer, "JPEG", quality=90)
             thumb_filename = f"{cluster_id}_thumb.jpg"
-            thumb_path = thumb_dir / thumb_filename
-            cropped.save(thumb_path, "JPEG", quality=90)
-            
-            return f"{upload_id}/thumbnails/{thumb_filename}"
+            return storage_service.save_thumbnail_bytes(upload_id, thumb_filename, thumb_buffer.getvalue())
     except Exception as e:
         logger.error(f"Failed to create face thumbnail for {cluster_id}: {e}")
         return None

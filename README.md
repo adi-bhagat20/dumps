@@ -4,7 +4,7 @@
 
 DUMPS is a full-stack AI-powered web application built for events, weddings, and group shoots. It uses face detection and unsupervised clustering to automatically separate a mixed folder of photos into one sub-collection per person — with live progress updates and instant zip downloads.
 
-> ⚡ **Current Status:** The database has been migrated to **MongoDB Atlas (Cloud M0)** with active SRV connection pooling, fail-fast ping verification, and connectivity testing tools. Photo file storage is currently on local disk (`./storage/`), transitioning to **Cloudflare R2** next.
+> ⚡ **Current Status:** Both the database and photo storage are fully migrated to the cloud! Metadata runs on **MongoDB Atlas (Cloud M0)**, and photos/thumbnails are stored in **Cloudflare R2** with pre-signed URLs, local caching, and $0 egress fees.
 
 ---
 
@@ -75,17 +75,14 @@ Stage 4 — Prominent-Face Assignment
 │        (avoids blocking the async event loop)           │
 └──────┬─────────────────┬───────────────────────────────┘
        │                 │
-┌──────▼───────────┐   ┌──────▼──────┐
-│  MongoDB Atlas   │   │ Local Disk  │
-│  (Motor + SRV)   │   │  Storage    │
-│                  │   │             │
-│ Active:          │   │ Currently:  │
-│ Cloud M0 Cluster │   │ ./storage/  │
-│ (AWS Mumbai)     │   │             │
-│                  │   │ Planned:    │
-│                  │   │ Cloudflare  │
-│                  │   │   R2 / S3   │
-└──────────────────┘   └─────────────┘
+┌──────▼───────────┐   ┌──────▼───────────┐
+│  MongoDB Atlas   │   │  Cloudflare R2   │
+│  (Motor + SRV)   │   │ (Boto3 / S3 API) │
+│                  │   │                  │
+│ Active:          │   │ Active:          │
+│ Cloud M0 Cluster │   │ dumps-photos     │
+│ (AWS Mumbai)     │   │ (Zero Egress)    │
+└──────────────────┘   └──────────────────┘
 ```
 
 ---
@@ -98,6 +95,7 @@ Stage 4 — Prominent-Face Assignment
 | `FastAPI` | Async web framework & REST API |
 | `Uvicorn` | ASGI server |
 | `Motor` | Async MongoDB driver with `dnspython` SRV resolution |
+| `Boto3` | S3-compatible client for Cloudflare R2 object storage |
 | `InsightFace` (`buffalo_s`) | Face detection + 512-D embedding extraction |
 | `ONNX Runtime` (CPU) | Inference runtime for InsightFace models |
 | `Scikit-Learn` (`DBSCAN`) | Unsupervised face clustering |
@@ -118,7 +116,7 @@ Stage 4 — Prominent-Face Assignment
 | Tool | Role |
 |---|---|
 | `MongoDB Atlas` | Managed cloud document database (AWS Mumbai M0) |
-| `Local disk` | File storage — `./storage/` directory (moving to R2) |
+| `Cloudflare R2` | Cloud object storage (10 GB free, $0 egress fees) |
 | `Docker` | Backend containerization |
 | `Vercel` | Frontend deployment target (config ready) |
 
@@ -278,7 +276,15 @@ cd backend
 python test_atlas.py
 ```
 
-### 2. Memory Profiling
+### 2. Cloudflare R2 Storage Diagnostic Tool
+Verify S3-compatible API connection, bucket reachability, read/write permissions, and pre-signed URL generation:
+
+```bash
+cd backend
+python test_r2.py
+```
+
+### 3. Memory Profiling
 The included `memory-measure.py` utility profiles how much RAM InsightFace consumes at startup — useful for planning deployment on memory-constrained hosts (e.g., Render free tier: 512 MB).
 
 ```bash
@@ -290,7 +296,6 @@ python memory-measure.py
 
 ## 🚧 Current Limitations
 
-- **Local disk storage:** Uploaded photos and thumbnails are currently stored in `./storage/` on the server. Transitioning to Cloudflare R2 / S3 object storage next.
 - **CPU-only inference:** The pipeline uses `CPUExecutionProvider`. Processing large batches (300+ photos) will be slow on CPU. GPU support requires swapping to `CUDAExecutionProvider`.
 - **No user authentication:** A `DEFAULT_USER_ID` placeholder is used. All uploads share the same namespace — multi-tenant isolation will be added in a future milestone.
 - **No 24-hour cleanup job:** The privacy-first auto-expiry policy is described in the UI; Atlas TTL indexes / background cleanup is scheduled next.
@@ -305,10 +310,12 @@ python memory-measure.py
 - Upgraded `requirements.txt` with `dnspython>=2.6.0` for robust SRV lookup
 - Added automatic startup ping verification and live database health probing on `/api/health`
 
-### 2. ☁️ Cloud Storage (S3 / Cloudflare R2)
-- Replace the local `./storage/` directory with **AWS S3** or **Cloudflare R2**
-- The `storage_service` abstraction in `services/storage.py` is already designed for this swap
-- Generate pre-signed URLs for photo serving instead of mounting a static directory
+### 2. ✅ ☁️ Cloud Object Storage (Cloudflare R2 - Completed)
+- Replaced local disk storage dependency with **Cloudflare R2** (S3-compatible, $0 egress fees)
+- Integrated `boto3` client in `StorageService` for seamless object upload and streaming
+- Added pre-signed URL generation for direct photo and thumbnail serving
+- Implemented in-memory streaming zip generation from R2
+- Added `test_r2.py` standalone diagnostic script to verify bucket access and pre-signed URLs
 
 ### 3. 🚀 Full Cloud Deployment
 - **Backend:** Deploy the Dockerized FastAPI backend to [Render](https://render.com) or [Railway](https://railway.app)

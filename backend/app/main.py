@@ -65,9 +65,12 @@ async def health_check():
     except Exception as e:
         db_status = f"error: {str(e)}"
 
+    storage_status = "r2_cloud" if settings.is_r2_configured else "local_disk"
+
     return {
         "status": "healthy" if db_status == "connected" else "degraded",
         "service": "dumps-api",
         "database": db_status,
+        "storage": storage_status,
         "version": "1.0.0"
     }

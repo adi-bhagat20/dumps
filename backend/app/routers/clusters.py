@@ -27,7 +27,7 @@ async def get_clusters(job_id: str):
     clusters = cluster_doc.get("clusters", [])
     for c in clusters:
         if c.get("thumbnail_key"):
-            c["thumbnail_url"] = f"/storage/{c['thumbnail_key']}"
+            c["thumbnail_url"] = storage_service.get_url(c["thumbnail_key"])
         else:
             c["thumbnail_url"] = None
 
@@ -65,7 +65,7 @@ async def get_cluster_photos(job_id: str, cluster_id: str):
     photos = [
         {
             "photo_key": key,
-            "url": f"/storage/{key}",
+            "url": storage_service.get_url(key),
             "filename": key.split("/")[-1]
         }
         for key in target_cluster.get("photo_keys", [])

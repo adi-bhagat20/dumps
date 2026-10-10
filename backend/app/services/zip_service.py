@@ -14,10 +14,10 @@ def create_cluster_zip(photo_keys: List[str], cluster_name: str) -> bytes:
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         for key in photo_keys:
-            full_path = storage_service.get_full_path(key)
-            if full_path.exists():
-                arcname = full_path.name
-                zf.write(full_path, arcname=arcname)
+            data = storage_service.get_bytes(key)
+            if data:
+                filename = Path(key).name
+                zf.writestr(filename, data)
             else:
                 logger.warning(f"File missing when creating zip: {key}")
 
