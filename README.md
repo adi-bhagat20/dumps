@@ -4,7 +4,7 @@
 
 DUMPS is a full-stack AI-powered web application built for events, weddings, and group shoots. It uses face detection and unsupervised clustering to automatically separate a mixed folder of photos into one sub-collection per person — with live progress updates and instant zip downloads.
 
-> ⚠️ **Current Status:** This project runs fully on a **local machine** (local MongoDB + local disk storage). Cloud deployment and MongoDB Atlas migration are planned future milestones — see [Future Scope](#-future-scope) below.
+> ⚡ **Current Status:** The database has been migrated to **MongoDB Atlas (Cloud M0)** with active SRV connection pooling, fail-fast ping verification, and connectivity testing tools. Photo file storage is currently on local disk (`./storage/`), transitioning to **Cloudflare R2** next.
 
 ---
 
@@ -75,16 +75,17 @@ Stage 4 — Prominent-Face Assignment
 │        (avoids blocking the async event loop)           │
 └──────┬─────────────────┬───────────────────────────────┘
        │                 │
-┌──────▼──────┐   ┌──────▼──────┐
-│  MongoDB    │   │ Local Disk  │
-│  (Motor)    │   │  Storage    │
-│             │   │             │
-│ Currently:  │   │ Currently:  │
-│ localhost   │   │ ./storage/  │
-│             │   │             │
-│ Planned:    │   │ Planned:    │
-│ Atlas (SRV) │   │  AWS S3/R2  │
-└─────────────┘   └─────────────┘
+┌──────▼───────────┐   ┌──────▼──────┐
+│  MongoDB Atlas   │   │ Local Disk  │
+│  (Motor + SRV)   │   │  Storage    │
+│                  │   │             │
+│ Active:          │   │ Currently:  │
+│ Cloud M0 Cluster │   │ ./storage/  │
+│ (AWS Mumbai)     │   │             │
+│                  │   │ Planned:    │
+│                  │   │ Cloudflare  │
+│                  │   │   R2 / S3   │
+└──────────────────┘   └─────────────┘
 ```
 
 ---
@@ -96,7 +97,7 @@ Stage 4 — Prominent-Face Assignment
 |---|---|
 | `FastAPI` | Async web framework & REST API |
 | `Uvicorn` | ASGI server |
-| `Motor` | Async MongoDB driver |
+| `Motor` | Async MongoDB driver with `dnspython` SRV resolution |
 | `InsightFace` (`buffalo_s`) | Face detection + 512-D embedding extraction |
 | `ONNX Runtime` (CPU) | Inference runtime for InsightFace models |
 | `Scikit-Learn` (`DBSCAN`) | Unsupervised face clustering |
@@ -113,11 +114,11 @@ Stage 4 — Prominent-Face Assignment
 | `Vanilla CSS` | Glassmorphism design system |
 | `EventSource` (native) | SSE client for live progress |
 
-### Infrastructure (Current)
+### Infrastructure
 | Tool | Role |
 |---|---|
-| `MongoDB` (local) | Document store — runs on `localhost:27017` |
-| `Local disk` | File storage — `./storage/` directory |
+| `MongoDB Atlas` | Managed cloud document database (AWS Mumbai M0) |
+| `Local disk` | File storage — `./storage/` directory (moving to R2) |
 | `Docker` | Backend containerization |
 | `Vercel` | Frontend deployment target (config ready) |
 
@@ -267,8 +268,17 @@ dumps/
 
 ---
 
-## 🧪 Memory Profiling
+## 🧪 Diagnostics & Profiling
 
+### 1. MongoDB Atlas Diagnostic Tool
+Verify connection, latency, authentication, and read/write permissions directly against your MongoDB Atlas cluster:
+
+```bash
+cd backend
+python test_atlas.py
+```
+
+### 2. Memory Profiling
 The included `memory-measure.py` utility profiles how much RAM InsightFace consumes at startup — useful for planning deployment on memory-constrained hosts (e.g., Render free tier: 512 MB).
 
 ```bash
@@ -280,28 +290,20 @@ python memory-measure.py
 
 ## 🚧 Current Limitations
 
-- **Local MongoDB only:** The app connects to `mongodb://localhost:27017` by default. There is no cloud database configured yet.
-- **Local disk storage:** Uploaded photos and thumbnails are stored in the `./storage/` directory on the server. There is no cloud object storage (S3/R2) configured yet.
+- **Local disk storage:** Uploaded photos and thumbnails are currently stored in `./storage/` on the server. Transitioning to Cloudflare R2 / S3 object storage next.
 - **CPU-only inference:** The pipeline uses `CPUExecutionProvider`. Processing large batches (300+ photos) will be slow on CPU. GPU support requires swapping to `CUDAExecutionProvider`.
-- **No user authentication:** A `DEFAULT_USER_ID` placeholder is used. All uploads share the same namespace — not suitable for multi-user production use yet.
-- **No 24-hour cleanup job:** The privacy-first auto-expiry policy is described in the UI but the background cleanup cron/task is not yet implemented.
+- **No user authentication:** A `DEFAULT_USER_ID` placeholder is used. All uploads share the same namespace — multi-tenant isolation will be added in a future milestone.
+- **No 24-hour cleanup job:** The privacy-first auto-expiry policy is described in the UI; Atlas TTL indexes / background cleanup is scheduled next.
 
 ---
 
-## 🔭 Future Scope
+## 🔭 Roadmap & Milestones
 
-These are the planned next steps to take DUMPS from a local prototype to a production-ready, cloud-deployed application:
-
-### 1. 🗄️ MongoDB Atlas Migration
-- Replace `MONGO_URI=mongodb://localhost:27017` with a **MongoDB Atlas SRV connection string**
-- Use Atlas's free tier (M0) for development, scale to M10+ for production
-- Enable Atlas **TTL indexes** on the `uploads` collection to auto-expire documents after 24 hours (replacing the manual cleanup policy)
-- No code changes required — only a `.env` update, since the Motor driver supports Atlas SRV out of the box
-
-```env
-# Future: swap this one line for cloud DB
-MONGO_URI=mongodb+srv://<user>:<password>@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
-```
+### 1. ✅ 🗄️ MongoDB Atlas Migration (Completed)
+- Replaced local MongoDB with **MongoDB Atlas SRV** (`mongodb+srv://...`)
+- Verified connection latency, authentication, and CRUD permissions with `test_atlas.py`
+- Upgraded `requirements.txt` with `dnspython>=2.6.0` for robust SRV lookup
+- Added automatic startup ping verification and live database health probing on `/api/health`
 
 ### 2. ☁️ Cloud Storage (S3 / Cloudflare R2)
 - Replace the local `./storage/` directory with **AWS S3** or **Cloudflare R2**

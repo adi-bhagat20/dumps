@@ -11,10 +11,16 @@ class DatabaseManager:
 db_manager = DatabaseManager()
 
 async def connect_to_mongo():
-    logger.info(f"Connecting to MongoDB at {settings.MONGO_URI}...")
-    db_manager.client = AsyncIOMotorClient(settings.MONGO_URI)
-    db_manager.db = db_manager.client[settings.DB_NAME]
-    logger.info("Connected to MongoDB successfully.")
+    logger.info("Connecting to MongoDB...")
+    try:
+        db_manager.client = AsyncIOMotorClient(settings.MONGO_URI, serverSelectionTimeoutMS=5000)
+        db_manager.db = db_manager.client[settings.DB_NAME]
+        # Ping the server to verify network and credentials
+        await db_manager.client.admin.command('ping')
+        logger.info(f"Connected to MongoDB successfully (database: '{settings.DB_NAME}').")
+    except Exception as e:
+        logger.error(f"Failed to connect to MongoDB: {e}")
+        raise
 
 async def close_mongo_connection():
     if db_manager.client:

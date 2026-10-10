@@ -55,4 +55,19 @@ app.mount("/storage", StaticFiles(directory=str(storage_path)), name="storage")
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "healthy", "service": "dumps-api", "version": "1.0.0"}
+    db_status = "connected"
+    try:
+        from app.database import db_manager
+        if db_manager.client is not None:
+            await db_manager.client.admin.command('ping')
+        else:
+            db_status = "disconnected"
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+
+    return {
+        "status": "healthy" if db_status == "connected" else "degraded",
+        "service": "dumps-api",
+        "database": db_status,
+        "version": "1.0.0"
+    }
