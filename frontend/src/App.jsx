@@ -4,12 +4,13 @@ import { UploadZone } from './components/UploadZone';
 import { ProgressBar } from './components/ProgressBar';
 import { PersonGrid } from './components/PersonGrid';
 import { PhotoGallery } from './components/PhotoGallery';
-import { uploadFolder, startJob, getClusterZipUrl } from './lib/api';
+import { uploadFolder, startJob, getClusterZipUrl, ensureServerAwake } from './lib/api';
 import { useSSE } from './hooks/useSSE';
 
 export function App() {
   const [stage, setStage] = useState('idle'); // 'idle' | 'uploading' | 'processing' | 'completed' | 'error'
   const [isUploading, setIsUploading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
   const [jobId, setJobId] = useState(null);
   const [progress, setProgress] = useState({ processed: 0, total: 0 });
   const [clusters, setClusters] = useState([]);
@@ -37,21 +38,29 @@ export function App() {
       setErrorMessage('');
       setIsUploading(true);
       setStage('uploading');
+      setStatusMessage('Checking server status...');
 
-      // 1. Upload folder of files to backend
+      // 1. Ensure backend is awake (handles free-tier cold starts gracefully)
+      await ensureServerAwake((msg) => setStatusMessage(msg));
+
+      setStatusMessage(`Uploading ${files.length} photos...`);
+      // 2. Upload folder of files to backend
       const uploadRes = await uploadFolder(files, folderName);
 
-      // 2. Start async face clustering job
+      setStatusMessage('Starting AI face clustering pipeline...');
+      // 3. Start async face clustering job
       const jobRes = await startJob(uploadRes.upload_id);
       
       setJobId(jobRes.job_id);
       setProgress({ processed: 0, total: uploadRes.file_count });
       setIsUploading(false);
+      setStatusMessage('');
       setStage('processing');
     } catch (err) {
       console.error('Error starting pipeline:', err);
       setErrorMessage(err.message || 'Failed to upload and start processing.');
       setIsUploading(false);
+      setStatusMessage('');
       setStage('error');
     }
   };
@@ -103,6 +112,8 @@ export function App() {
           <ProgressBar
             processed={progress.processed}
             total={progress.total}
+            title={stage === 'uploading' ? (statusMessage || "Preparing Upload...") : "Analyzing & Clustering Photos..."}
+            statusText={stage === 'uploading' ? statusMessage : undefined}
           />
         )}
 

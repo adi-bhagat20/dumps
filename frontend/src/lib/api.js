@@ -1,5 +1,33 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
+export async function ensureServerAwake(onStatus) {
+  // Check if server is already awake
+  try {
+    const res = await fetch(`${API_BASE}/api/health`, { cache: 'no-store' });
+    if (res.ok) return true;
+  } catch (e) {
+    // server is likely sleeping
+  }
+
+  onStatus?.("Waking up cloud server (takes ~30-40s on free tier)...");
+
+  // Poll /api/health every 3.5 seconds for up to 60s
+  const start = Date.now();
+  while (Date.now() - start < 60000) {
+    await new Promise((r) => setTimeout(r, 3500));
+    try {
+      const res = await fetch(`${API_BASE}/api/health`, { cache: 'no-store' });
+      if (res.ok) {
+        onStatus?.("Server ready! Starting upload...");
+        return true;
+      }
+    } catch (e) {
+      // still spinning up
+    }
+  }
+  throw new Error("Server took too long to wake up. Please click Try Again.");
+}
+
 export async function uploadFolder(files, folderName = "Photos") {
   const formData = new FormData();
   formData.append("folder_name", folderName);

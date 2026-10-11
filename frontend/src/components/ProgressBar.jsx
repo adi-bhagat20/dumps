@@ -1,12 +1,12 @@
 import React from 'react';
 
-export function ProgressBar({ processed, total }) {
+export function ProgressBar({ processed, total, statusText, title }) {
   const percentage = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
 
   return (
     <div className="glass-panel progress-card">
       <div className="progress-header">
-        <span className="progress-title">Analyzing & Clustering Photos...</span>
+        <span className="progress-title">{title || "Analyzing & Clustering Photos..."}</span>
         <span className="progress-counter">
           {processed} / {total} photos analyzed ({percentage}%)
         </span>
@@ -20,7 +20,7 @@ export function ProgressBar({ processed, total }) {
       </div>
 
       <p style={{ marginTop: '16px', fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-        Detecting faces, deduplicating, and computing DBSCAN clusters...
+        {statusText || "Detecting faces, deduplicating, and computing DBSCAN clusters..."}
       </p>
     </div>
   );
