@@ -86,15 +86,16 @@ def detect_faces_in_image(photo_key: str, image_path: Path) -> List[DetectedFace
     # Resize long edge to 640px if larger, keeping aspect ratio for inference speed
     h, w = img.shape[:2]
     max_dim = max(h, w)
-    scale = 1.0
     if max_dim > 640:
         scale = 640.0 / max_dim
         new_w, new_h = int(w * scale), int(h * scale)
         img_resized = cv2.resize(img, (new_w, new_h))
+        del img  # Immediately free raw high-res bitmap (up to 60MB) before ONNX inference
     else:
         img_resized = img
 
     raw_faces = model.get(img_resized)
+    del img_resized
     faces: List[DetectedFace] = []
 
     for raw_face in raw_faces:

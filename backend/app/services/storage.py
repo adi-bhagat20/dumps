@@ -51,6 +51,36 @@ class StorageService:
         thumb_dir.mkdir(parents=True, exist_ok=True)
         return thumb_dir
 
+    def save_upload_file(self, upload_id: str, filename: str, upload_file, content_type: str = "image/jpeg") -> tuple:
+        """
+        Stream an UploadFile directly to local disk in 64KB chunks and to Cloudflare R2
+        without buffering the entire file in RAM.
+        """
+        storage_key = f"{upload_id}/{filename}"
+        upload_dir = self.get_upload_dir(upload_id)
+        file_path = upload_dir / filename
+
+        # 1. Stream in 64KB chunks to local disk
+        with open(file_path, "wb") as f:
+            shutil.copyfileobj(upload_file.file, f, length=65536)
+
+        size_bytes = file_path.stat().st_size
+
+        # 2. Upload to Cloudflare R2 via upload_file (streams from disk directly)
+        if self.is_cloud:
+            try:
+                self.s3_client.upload_file(
+                    Filename=str(file_path),
+                    Bucket=self.bucket_name,
+                    Key=storage_key,
+                    ExtraArgs={"ContentType": content_type}
+                )
+                logger.debug(f"Streamed {storage_key} to Cloudflare R2.")
+            except Exception as e:
+                logger.error(f"Failed to stream {storage_key} to R2: {e}")
+
+        return storage_key, size_bytes
+
     def save_bytes(self, upload_id: str, filename: str, content: bytes, content_type: str = "image/jpeg") -> str:
         storage_key = f"{upload_id}/{filename}"
         
@@ -60,14 +90,14 @@ class StorageService:
         with open(file_path, "wb") as f:
             f.write(content)
 
-        # 2. Upload to Cloudflare R2 if configured
+        # 2. Upload to Cloudflare R2 if configured (stream from disk)
         if self.is_cloud:
             try:
-                self.s3_client.put_object(
+                self.s3_client.upload_file(
+                    Filename=str(file_path),
                     Bucket=self.bucket_name,
                     Key=storage_key,
-                    Body=content,
-                    ContentType=content_type
+                    ExtraArgs={"ContentType": content_type}
                 )
                 logger.debug(f"Uploaded {storage_key} to Cloudflare R2.")
             except Exception as e:

@@ -39,6 +39,9 @@ This document logs all critical architectural pitfalls, system hurdles, and secu
   1. **Runtime Download & Extraction Spike:** At startup, `InsightFace` was downloading a 125 MB zip archive, decompressing it in RAM, and initializing 5 separate ONNX models simultaneously while FastAPI was booting.
   2. **Multi-Core Host Thread Explosion:** Render runs containers on shared cloud host servers with **32 to 64 CPU cores**. By default, ONNX Runtime, OpenMP (`OMP`), and OpenBLAS inspect the host CPU count and allocate 64 threads and massive memory arenas for 64 cores, instantly exceeding 512 MB.
   3. **Unused Model Overhead:** `buffalo_s` packages 5 models (detection, recognition, 3D landmarks, 2D-106 landmarks, gender/age). The app only requires detection and recognition, but was loading all 5 into RAM.
+  4. **In-Memory Multipart File Buffering:** Reading uploaded photos via `await file.read()` held full multi-megabyte image binaries in Python's heap, and `s3_client.put_object(Body=content)` buffered them again in Boto3.
+  5. **Uncompressed High-Res Bitmaps in Scope:** Full-resolution 12MP–48MP smartphone photos decoded via `cv2.imread` allocated 40–80 MB raw bitmaps that lingered in scope alongside ONNX tensors during face detection.
+  6. **Linux glibc Arena Allocation:** On shared 32–64 core cloud hosts, Debian's glibc creates up to 512 memory arenas (`8 * cores`), accumulating hundreds of megabytes of unreclaimed thread-local heap caches.
 * **The Solution:**
   - **Bake Weights at Build Time:** Added a step in the [Dockerfile](file:///d:/projects/dumps/backend/Dockerfile) to pre-download model weights during `docker build` (where build memory is unconstrained), eliminating runtime downloads and zip decompression.
   - **Selective Model Loading:** Configured `allowed_modules=['detection', 'recognition']` in [face_pipeline.py](file:///d:/projects/dumps/backend/app/services/face_pipeline.py), cutting ONNX memory by over 60%.
@@ -46,8 +49,10 @@ This document logs all critical architectural pitfalls, system hurdles, and secu
     `sess_options.intra_op_num_threads = 1`
     `sess_options.inter_op_num_threads = 1`
     `sess_options.enable_cpu_mem_arena = False`
-  - **OS-Level Thread Limits:** Set `OMP_NUM_THREADS=1`, `OPENBLAS_NUM_THREADS=1`, and `MKL_NUM_THREADS=1` in the Dockerfile.
-  - **Lazy Loading:** Removed eager model loading from the server boot lifespan. The web server now boots in under 1 second using only **~45 MB RAM**, deferring model initialization until an actual job arrives.
+  - **OS-Level Thread & glibc Limits:** Set `OMP_NUM_THREADS=1`, `OPENBLAS_NUM_THREADS=1`, `MKL_NUM_THREADS=1`, and `MALLOC_ARENA_MAX=2` in the Dockerfile to prevent thread pool and memory arena expansion.
+  - **Lazy Loading:** Removed eager model loading from the server boot lifespan. The web server boots in under 1 second using only **~45 MB RAM**.
+  - **Chunked File Streaming:** Replaced `await file.read()` with chunked disk streaming (`shutil.copyfileobj(..., length=65536)`) and `s3_client.upload_file(...)` so uploaded photos never buffer in RAM.
+  - **Immediate Bitmap Disposal & Garbage Collection:** Immediately delete raw OpenCV bitmaps (`del img`) before running ONNX detection, and trigger `gc.collect()` after each processed photo to return memory to the OS.
 
 ---
 

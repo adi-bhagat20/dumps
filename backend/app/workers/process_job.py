@@ -85,6 +85,10 @@ async def run_pipeline_job(job_id: str, upload_id: str):
 
             processed_count += 1
 
+            # Periodically release memory back to OS
+            import gc
+            gc.collect()
+
             # Update job progress in MongoDB
             await db.jobs.update_one(
                 {"_id": job_id},

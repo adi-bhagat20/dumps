@@ -48,23 +48,25 @@ async def upload_folder(
             logger.info(f"Skipping unsupported non-image file: {filename}")
             continue
 
-        content = await file.read()
-        if not content:
-            continue
-
-        # Handle HEIC conversion
         if ext == ".heic":
+            # Handle HEIC conversion
             try:
+                content = await file.read()
+                if not content:
+                    continue
                 img = Image.open(io.BytesIO(content))
                 img = img.convert("RGB")
                 out_buffer = io.BytesIO()
-                img.save(out_buffer, format="JPEG", quality=95)
-                content = out_buffer.getvalue()
+                img.save(out_buffer, format="JPEG", quality=90)
+                jpeg_bytes = out_buffer.getvalue()
                 
-                # Update filename extension to .jpg
                 base_name = os.path.splitext(os.path.basename(filename))[0]
                 storage_filename = f"{base_name}_{uuid.uuid4().hex[:6]}.jpg"
                 content_type = "image/jpeg"
+                storage_key = storage_service.save_bytes(upload_id, storage_filename, jpeg_bytes, content_type)
+                size_bytes = len(jpeg_bytes)
+
+                del img, out_buffer, content, jpeg_bytes
             except Exception as e:
                 logger.error(f"Failed HEIC conversion for {filename}: {e}")
                 continue
@@ -72,17 +74,22 @@ async def upload_folder(
             base_name = os.path.splitext(os.path.basename(filename))[0]
             storage_filename = f"{base_name}_{uuid.uuid4().hex[:6]}{ext}"
             content_type = file.content_type or "image/jpeg"
-
-        # Save to storage service
-        storage_key = storage_service.save_bytes(upload_id, storage_filename, content)
+            
+            # Stream directly in chunks to disk & R2 without loading bytes into Python memory
+            storage_key, size_bytes = storage_service.save_upload_file(
+                upload_id, storage_filename, file, content_type
+            )
 
         saved_files.append({
             "filename": storage_filename,
             "original_name": os.path.basename(filename),
             "storage_key": storage_key,
             "content_type": content_type,
-            "size_bytes": len(content)
+            "size_bytes": size_bytes
         })
+
+        import gc
+        gc.collect()
 
     if not saved_files:
         raise HTTPException(
