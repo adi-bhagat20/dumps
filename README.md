@@ -294,48 +294,44 @@ python memory-measure.py
 
 ---
 
-## 🚧 Current Limitations
+## ⚠️ Architectural Pitfalls & Engineering Log
 
-- **CPU-only inference:** The pipeline uses `CPUExecutionProvider`. Processing large batches (300+ photos) will be slow on CPU. GPU support requires swapping to `CUDAExecutionProvider`.
-- **No user authentication:** A `DEFAULT_USER_ID` placeholder is used. All uploads share the same namespace — multi-tenant isolation will be added in a future milestone.
-- **No 24-hour cleanup job:** The privacy-first auto-expiry policy is described in the UI; Atlas TTL indexes / background cleanup is scheduled next.
+All critical technical hurdles, container memory constraints (Render 512MB RAM OOM), SSL/TLS handshake fixes, and architectural decisions encountered during cloud migration are documented in detail in [PITFALLS.md](file:///d:/projects/dumps/PITFALLS.md).
 
 ---
 
-## 🔭 Roadmap & Milestones
+## 🔭 Project Milestones & Future Scope
 
-### 1. ✅ 🗄️ MongoDB Atlas Migration (Completed)
-- Replaced local MongoDB with **MongoDB Atlas SRV** (`mongodb+srv://...`)
-- Verified connection latency, authentication, and CRUD permissions with `test_atlas.py`
-- Upgraded `requirements.txt` with `dnspython>=2.6.0` for robust SRV lookup
-- Added automatic startup ping verification and live database health probing on `/api/health`
+### Completed Milestones
+- [x] **🗄️ MongoDB Atlas Migration:** Replaced local MongoDB with managed MongoDB Atlas SRV (`mongodb+srv://...`), complete with automated fail-fast startup ping verification and `/api/health` probing.
+- [x] **☁️ Cloud Object Storage (Cloudflare R2):** Replaced local disk storage with Cloudflare R2 (S3-compatible, $0 egress fees), utilizing pre-signed URLs for edge image delivery and in-memory streaming zips.
+- [x] **🚀 Cloud Backend Deployment (Render):** Dockerized backend live on Render (`https://dumps-api.onrender.com`) with pre-baked ONNX weights, single-threaded CPU memory limits, and lazy model loading.
+- [x] **🌐 Frontend Cloud Deployment (Vercel):** React frontend configured with dynamic `VITE_API_BASE_URL` support for zero-config global deployment.
 
-### 2. ✅ ☁️ Cloud Object Storage (Cloudflare R2 - Completed)
-- Replaced local disk storage dependency with **Cloudflare R2** (S3-compatible, $0 egress fees)
-- Integrated `boto3` client in `StorageService` for seamless object upload and streaming
-- Added pre-signed URL generation for direct photo and thumbnail serving
-- Implemented in-memory streaming zip generation from R2
-- Added `test_r2.py` standalone diagnostic script to verify bucket access and pre-signed URLs
+---
 
-### 3. 🚀 Full Cloud Deployment
-- **Backend:** Deploy the Dockerized FastAPI backend to [Render](https://render.com) or [Railway](https://railway.app)
-  - The `Dockerfile` and dynamic `PORT` env var support are already in place
-  - Attach MongoDB Atlas as the database
-- **Frontend:** Deploy the React/Vite app to [Vercel](https://vercel.com)
-  - `vercel.json` is already configured in the `frontend/` directory
-  - Update the API base URL to point to the deployed backend
+### 🔮 Future Scope & Planned Enhancements
 
-### 4. 🔐 User Authentication
-- Add JWT-based auth (e.g., using `fastapi-users` or Auth0)
-- Replace `DEFAULT_USER_ID` with real per-user namespacing so uploads are isolated
+#### 1. 👤 Role-Based Authentication & Stateful User Dashboards
+* **Stateful User Experience:** Transition from the current anonymous/stateless single-session workflow to a fully persistent, stateful application.
+* **User Accounts & RBAC:** Implement JWT / OAuth2 authentication (e.g., Supabase Auth or Auth0) with role-based access control (Admin, Event Organizer, Guest).
+* **Personal Dashboard:** Provide an authenticated dashboard where users can view their past photo dump uploads, re-visit previously generated face clusters, download collections later, and track real-time processing jobs across multiple browser tabs and devices.
+* **Isolated Multi-Tenant Namespaces:** Replace the `DEFAULT_USER_ID` placeholder with user-scoped database collections and secure R2 storage prefixes (`/users/{user_id}/uploads/{upload_id}/`).
 
-### 5. ⏰ Automated 24-Hour Cleanup
-- Implement the auto-expiry policy that is currently only mentioned in the UI footer
-- Options: Atlas TTL index (database-level) + a scheduled cleanup worker (application-level) to delete the corresponding files from storage
+#### 2. ⏱️ Automated 24-Hour Timeout (Photo & Metadata Auto-Deletion)
+* **Programmatic Privacy Enforcement:** Back the "24-hour privacy guarantee" with automated infrastructure-level cleanup jobs.
+* **Database TTL Indexing:** Create native MongoDB **Time-To-Live (TTL)** indexes on `created_at` fields (`expireAfterSeconds=86400`) to automatically purge expired jobs, upload metadata, and cluster records.
+* **Cloud Object Purge:** Implement Cloudflare R2 bucket lifecycle rules or a daily scheduled worker to automatically delete expired image files and face crop thumbnails from object storage once their 24-hour window expires, preventing unnecessary storage costs.
 
-### 6. ⚡ GPU Inference (Optional)
-- Switch `CPUExecutionProvider` → `CUDAExecutionProvider` in `face_pipeline.py`
-- Deploy on a GPU-enabled host for dramatically faster processing of large photo batches
+#### 3. 🛡️ Strict Data Validation & Anti-Malware Security
+* **Magic Byte File Inspection:** Move beyond trusting browser-supplied file extensions (`.jpg`, `.png`). Inspect file header magic bytes via `python-magic` or Pillow byte verification to guarantee uploaded files are genuine images.
+* **Malicious Payload Prevention:** Prevent polyglot files, embedded executable scripts (e.g., SVG XSS, `.exe` disguised as `.jpg`), and malicious zip/archive bombs from being processed or stored.
+* **Batch & Size Boundaries:** Enforce strict per-file size limits (e.g., max 25 MB/photo) and total batch limits (e.g., max 500 MB/upload) to guard against Denial of Service (DoS) attacks.
+* **Graceful Handling of Corrupt Media:** Safely isolate corrupt, truncated, or unreadable image files without crashing the background worker pipeline.
+
+#### 4. ⚡ GPU Inference & Asynchronous Task Queuing
+* **Job Serialization:** Integrate Redis / Celery (or BullMQ) to queue multiple clustering jobs sequentially, preventing multi-user memory contention on free-tier servers.
+* **GPU Acceleration:** Switch InsightFace from `CPUExecutionProvider` to `CUDAExecutionProvider` on a dedicated GPU worker instance for sub-second processing on large 500+ photo dumps.
 
 ---
 
