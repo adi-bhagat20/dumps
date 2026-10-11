@@ -13,7 +13,12 @@ db_manager = DatabaseManager()
 async def connect_to_mongo():
     logger.info("Connecting to MongoDB...")
     try:
-        db_manager.client = AsyncIOMotorClient(settings.MONGO_URI, serverSelectionTimeoutMS=5000)
+        import certifi
+        db_manager.client = AsyncIOMotorClient(
+            settings.MONGO_URI,
+            serverSelectionTimeoutMS=8000,
+            tlsCAFile=certifi.where()
+        )
         db_manager.db = db_manager.client[settings.DB_NAME]
         # Ping the server to verify network and credentials
         await db_manager.client.admin.command('ping')

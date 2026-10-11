@@ -42,7 +42,8 @@ async def test_connection():
     print("Step 1: Checking SRV DNS & Establishing Connection...")
     t0 = time.time()
     try:
-        client = AsyncIOMotorClient(mongo_uri, serverSelectionTimeoutMS=7000)
+        import certifi
+        client = AsyncIOMotorClient(mongo_uri, serverSelectionTimeoutMS=8000, tlsCAFile=certifi.where())
         # Force network round-trip ping
         await client.admin.command("ping")
         elapsed = (time.time() - t0) * 1000
