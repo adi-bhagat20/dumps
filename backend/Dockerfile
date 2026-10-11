@@ -19,6 +19,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Pre-download buffalo_s weights at build time so the 512MB runtime container never spikes RAM on downloads/unzipping
+RUN python -c "from insightface.app import FaceAnalysis; FaceAnalysis(name='buffalo_s', allowed_modules=['detection', 'recognition'])"
+
 # Copy application code
 COPY app ./app
 

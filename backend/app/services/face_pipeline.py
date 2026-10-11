@@ -21,8 +21,12 @@ def init_face_model():
     global _face_app
     if _face_app is None:
         logger.info("Initializing InsightFace model (CPU mode)...")
-        # ctx_id = -1 instructs insightface to use CPU
-        app = FaceAnalysis(name="buffalo_s", providers=['CPUExecutionProvider'])
+        # Only load detection and recognition models (saves ~60% memory, skips unused landmarks/gender models)
+        app = FaceAnalysis(
+            name="buffalo_s",
+            providers=['CPUExecutionProvider'],
+            allowed_modules=['detection', 'recognition']
+        )
         app.prepare(ctx_id=-1, det_size=(640, 640))
         _face_app = app
         logger.info("InsightFace model initialized successfully.")
