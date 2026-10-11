@@ -20,12 +20,21 @@ _face_app: Optional[FaceAnalysis] = None
 def init_face_model():
     global _face_app
     if _face_app is None:
-        logger.info("Initializing InsightFace model (CPU mode)...")
-        # Only load detection and recognition models (saves ~60% memory, skips unused landmarks/gender models)
+        logger.info("Initializing InsightFace model (low-memory mode)...")
+        import onnxruntime as ort
+
+        # Enforce single-thread execution and disable large memory arenas to prevent multi-core RAM explosion
+        sess_options = ort.SessionOptions()
+        sess_options.intra_op_num_threads = 1
+        sess_options.inter_op_num_threads = 1
+        sess_options.enable_cpu_mem_arena = False
+        sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+
         app = FaceAnalysis(
             name="buffalo_s",
             providers=['CPUExecutionProvider'],
-            allowed_modules=['detection', 'recognition']
+            allowed_modules=['detection', 'recognition'],
+            sess_options=sess_options
         )
         app.prepare(ctx_id=-1, det_size=(640, 640))
         _face_app = app

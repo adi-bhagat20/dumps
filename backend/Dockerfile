@@ -1,8 +1,14 @@
 FROM python:3.12-slim
 
 # Prevent Python from writing pyc files to disk and buffering stdout/stderr
+# Limit thread pools across OpenMP, OpenBLAS, MKL to 1 thread to prevent memory explosion on cloud multi-core hosts
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    OMP_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    VECLIB_MAXIMUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1
 
 # Install system libraries required by OpenCV and Pillow
 RUN apt-get update && apt-get install -y --no-install-recommends \

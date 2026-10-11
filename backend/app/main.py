@@ -21,8 +21,6 @@ logger = logging.getLogger("dumps_backend")
 async def lifespan(app: FastAPI):
     logger.info("Initializing DUMPS backend service...")
     await connect_to_mongo()
-    # Pre-initialize InsightFace model at startup
-    init_face_model()
     yield
     await close_mongo_connection()
     logger.info("DUMPS backend shutdown complete.")
