@@ -26,8 +26,13 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download buffalo_s weights at build time so the 512MB runtime container never spikes RAM on downloads/unzipping
-RUN python -c "from insightface.app import FaceAnalysis; FaceAnalysis(name='buffalo_s', allowed_modules=['detection', 'recognition'])"
+# Pre-download buffalo_s weights at build time, then purge the 137MB 3D-mesh, 2D-landmark, and age/gender models
+# so ONLY det_500m.onnx (2.4MB) and w600k_mbf.onnx (13MB) exist in the container image
+RUN python -c "from insightface.app import FaceAnalysis; FaceAnalysis(name='buffalo_s', allowed_modules=['detection', 'recognition'])" \
+    && rm -f /root/.insightface/models/buffalo_s/1k3d68.onnx \
+             /root/.insightface/models/buffalo_s/2d106det.onnx \
+             /root/.insightface/models/buffalo_s/genderage.onnx \
+             /root/.insightface/models/buffalo_s.zip
 
 # Copy application code
 COPY app ./app

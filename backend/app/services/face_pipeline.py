@@ -30,6 +30,19 @@ def init_face_model():
         sess_options.enable_cpu_mem_arena = False
         sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
 
+        # Ensure heavy unused models (137MB 3D landmarks, etc.) are purged from disk
+        # so InsightFace never loads them into C++ ONNX Runtime memory
+        model_dir = Path(os.path.expanduser("~/.insightface/models/buffalo_s"))
+        if model_dir.exists():
+            for heavy_model in ["1k3d68.onnx", "2d106det.onnx", "genderage.onnx"]:
+                heavy_file = model_dir / heavy_model
+                if heavy_file.exists():
+                    try:
+                        heavy_file.unlink()
+                        logger.info(f"Purged unused model from disk: {heavy_model}")
+                    except Exception as e:
+                        logger.warning(f"Could not purge {heavy_model}: {e}")
+
         app = FaceAnalysis(
             name="buffalo_s",
             providers=['CPUExecutionProvider'],

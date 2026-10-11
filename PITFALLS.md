@@ -38,13 +38,12 @@ This document logs all critical architectural pitfalls, system hurdles, and secu
 * **The Pitfall:** 
   1. **Runtime Download & Extraction Spike:** At startup, `InsightFace` was downloading a 125 MB zip archive, decompressing it in RAM, and initializing 5 separate ONNX models simultaneously while FastAPI was booting.
   2. **Multi-Core Host Thread Explosion:** Render runs containers on shared cloud host servers with **32 to 64 CPU cores**. By default, ONNX Runtime, OpenMP (`OMP`), and OpenBLAS inspect the host CPU count and allocate 64 threads and massive memory arenas for 64 cores, instantly exceeding 512 MB.
-  3. **Unused Model Overhead:** `buffalo_s` packages 5 models (detection, recognition, 3D landmarks, 2D-106 landmarks, gender/age). The app only requires detection and recognition, but was loading all 5 into RAM.
+  3. **Unused Model Overhead & InsightFace Loader Quirk:** `buffalo_s` packages 5 models (detection, recognition, 3D landmarks, 2D-106 landmarks, gender/age). Even when passing `allowed_modules=['detection', 'recognition']`, InsightFace's internal loader iterates through all `.onnx` files and instantiates C++ ONNX sessions for all of them *first* before filtering. The very first file loaded alphabetically is `1k3d68.onnx` — a **136.95 MB 3D facial mesh model** that our app doesn't even use. This single model bloated C++ runtime memory by ~280 MB!
   4. **In-Memory Multipart File Buffering:** Reading uploaded photos via `await file.read()` held full multi-megabyte image binaries in Python's heap, and `s3_client.put_object(Body=content)` buffered them again in Boto3.
   5. **Uncompressed High-Res Bitmaps in Scope:** Full-resolution 12MP–48MP smartphone photos decoded via `cv2.imread` allocated 40–80 MB raw bitmaps that lingered in scope alongside ONNX tensors during face detection.
   6. **Linux glibc Arena Allocation:** On shared 32–64 core cloud hosts, Debian's glibc creates up to 512 memory arenas (`8 * cores`), accumulating hundreds of megabytes of unreclaimed thread-local heap caches.
 * **The Solution:**
-  - **Bake Weights at Build Time:** Added a step in the [Dockerfile](file:///d:/projects/dumps/backend/Dockerfile) to pre-download model weights during `docker build` (where build memory is unconstrained), eliminating runtime downloads and zip decompression.
-  - **Selective Model Loading:** Configured `allowed_modules=['detection', 'recognition']` in [face_pipeline.py](file:///d:/projects/dumps/backend/app/services/face_pipeline.py), cutting ONNX memory by over 60%.
+  - **Prune Unused Heavy Weights (90% Model Reduction):** Explicitly deleted `1k3d68.onnx` (137 MB), `2d106det.onnx` (4.8 MB), and `genderage.onnx` (1.2 MB) during `docker build` and via runtime pre-flight checks in [face_pipeline.py](file:///d:/projects/dumps/backend/app/services/face_pipeline.py). The container now only retains `det_500m.onnx` (2.4 MB) and `w600k_mbf.onnx` (13 MB), dropping model footprint from **158 MB to 15.4 MB**.
   - **Strict Single-Thread & Zero-Arena Execution:** Passed custom `SessionOptions` to ONNX:
     `sess_options.intra_op_num_threads = 1`
     `sess_options.inter_op_num_threads = 1`
